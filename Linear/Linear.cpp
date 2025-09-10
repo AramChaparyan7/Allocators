@@ -2,7 +2,8 @@
 #define LINEARCPP
 #include "Linear.hpp"
 
-inline size_t align(size_t p, size_t al) {
+template <typename T>
+size_t LinearAlloc<T>::align(size_type p, size_type al) {
     size_t m = p % al;
     if(m != 0) {
         p += al - m;
@@ -12,7 +13,7 @@ inline size_t align(size_t p, size_t al) {
 
 template <typename T>
 LinearAlloc<T>::LinearAlloc(size_t size) : size_(size), offset_(0) {
-    buf_ = static_cast<unsigned char*>(operator new(sizeof(T) * size));
+    buf_ = static_cast<void*>(operator new(size));
 }
 
 template <typename T>
@@ -21,14 +22,14 @@ LinearAlloc<T>::~LinearAlloc() {
 }
 
 template <typename T>
-T* LinearAlloc<T>::allocate(size_t n) {
-    if(offset_ + n > size_) {
+typename LinearAlloc<T>::pointer LinearAlloc<T>::allocate(size_t n) {
+    if(offset_ + n * sizeof(T)> size_) {
         throw std::bad_alloc();
     }
-    size_t of = offset_;
-    offset_ += n;
-    align(offset_, alignof(T));
-    T* ptr = reinterpret_cast<T*>(buf_ + offset_); 
+    size_t aligned = this->align(offset_, alignof(T));
+    offset_ = aligned + n * sizeof(T);
+    char* c = reinterpret_cast<char*>(buf_);
+    T* ptr = reinterpret_cast<T*>(c + aligned); 
     return ptr;
 } 
 
@@ -40,5 +41,15 @@ void LinearAlloc<T>::reset() {
     offset_ = 0;
 }
 
+template <typename T>
+template <typename ...Args>
+void LinearAlloc<T>::construct(T* ptr, Args&&... args) {
+    new(ptr) T(std::forward<Args>(args)...); 
+}
+
+template <typename T>
+void LinearAlloc<T>::destroy(LinearAlloc<T>::pointer ptr) {
+    ptr->~T();
+}
 
 #endif
